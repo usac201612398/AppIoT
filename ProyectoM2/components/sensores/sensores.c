@@ -19,6 +19,7 @@
 
 #define DS18B20_GPIO GPIO_NUM_15
 #define MAX_DEVICES 1
+#define ALTURA_TANQUE_CM 60.0
 
 static volatile uint32_t pulse_count = 0;
 static portMUX_TYPE pulse_mux = portMUX_INITIALIZER_UNLOCKED;
@@ -44,9 +45,16 @@ static void ultrasonico_task(void *arg)
 
         if (res == ESP_OK)
         {
+            float nivel_cm = ALTURA_TANQUE_CM - distancia_cm;
+            if (nivel_cm > ALTURA_TANQUE_CM)
+                nivel_cm = ALTURA_TANQUE_CM;
+
+            if (nivel_cm < 0)
+                nivel_cm = 0;
+            float porcentaje_llenado = 100 * (nivel_cm / 60);
             msg.sensor = SENSOR_ULTRASONICO;
-            msg.valor1 = (float)distancia_cm;
-            msg.valor2 = 0;
+            msg.valor1 = nivel_cm;
+            msg.valor2 = porcentaje_llenado;
             msg.timestamp_ms = esp_timer_get_time() / 1000;
 
             xQueueSend(sensor_queue, &msg, portMAX_DELAY);
@@ -78,7 +86,6 @@ static void caudal_task(void *arg)
     while (1)
     {
         vTaskDelay(pdMS_TO_TICKS(INTERVAL_MS));
-
 
         uint32_t count;
         portENTER_CRITICAL(&pulse_mux);
@@ -131,7 +138,6 @@ static void temperatura_task(void *arg)
         vTaskDelay(pdMS_TO_TICKS(2000));
     }
 }
-
 
 void caudalimetro_init(QueueHandle_t queue)
 {
