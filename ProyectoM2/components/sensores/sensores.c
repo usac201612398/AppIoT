@@ -19,7 +19,9 @@
 
 #define DS18B20_GPIO GPIO_NUM_15
 #define MAX_DEVICES 1
-#define ALTURA_TANQUE_CM 60.0
+#define ALTURA_TANQUE_CM 40.0
+#define RELAY_ACTIVE_LEVEL 0   // 
+
 
 static volatile uint32_t pulse_count = 0;
 static portMUX_TYPE pulse_mux = portMUX_INITIALIZER_UNLOCKED;
@@ -33,6 +35,7 @@ static const char *TAG = "SENSORES_TANQUE";
 static ultrasonic_sensor_t tank_sensor = {
     .trigger_pin = TRIG_PIN,
     .echo_pin = ECHO_PIN};
+
 
 static void ultrasonico_task(void *arg)
 {
@@ -48,10 +51,11 @@ static void ultrasonico_task(void *arg)
             float nivel_cm = ALTURA_TANQUE_CM - distancia_cm;
             if (nivel_cm > ALTURA_TANQUE_CM)
                 nivel_cm = ALTURA_TANQUE_CM;
+                
 
             if (nivel_cm < 0)
                 nivel_cm = 0;
-            float porcentaje_llenado = 100 * (nivel_cm / 60);
+            float porcentaje_llenado = 100 * (nivel_cm / ALTURA_TANQUE_CM);
             msg.sensor = SENSOR_ULTRASONICO;
             msg.valor1 = nivel_cm;
             msg.valor2 = porcentaje_llenado;
@@ -59,7 +63,8 @@ static void ultrasonico_task(void *arg)
 
             xQueueSend(sensor_queue, &msg, portMAX_DELAY);
 
-            ESP_LOGI(TAG, "Nivel: %d cm", distancia_cm);
+            ESP_LOGI(TAG, "Nivel: %.2f cm", nivel_cm);
+            ESP_LOGI(TAG, "Nivel: %.2f %%", porcentaje_llenado);
         }
         else
         {

@@ -7,7 +7,9 @@
 #include "freertos/queue.h"
 
 #include "esp_log.h"
+
 #define PIN_VALVULA_LLENADO 27
+#define RELAY_ACTIVE_LEVEL 0
 #define NIVEL_MIN 20.0 // cm o porcentaje (según tu medición)
 #define NIVEL_MAX 80.0
 static bool valvula_llenado_activa = false;
@@ -17,6 +19,7 @@ static const char *TAG = "LISTENER";
 typedef struct
 {
     float nivel;
+    float porcentaje_llenado;
     float caudal;
     float temp_agua;
 } tanque_state_t;
@@ -25,7 +28,7 @@ static tanque_state_t tanque_state = {
     .nivel = 0,
     .caudal = 0,
     .temp_agua = 0,
-};
+    .porcentaje_llenado = 0};
 
 static void publish_tanque_state(void)
 {
@@ -39,10 +42,12 @@ static void publish_tanque_state(void)
              "\"nivel\":%.2f,"
              "\"caudal\":%.2f,"
              "\"temp_agua\":%.2f"
+             "\"porcen-llenado\":%.2f"
              "}",
              tanque_state.nivel,
              tanque_state.caudal,
-             tanque_state.temp_agua);
+             tanque_state.temp_agua,
+             tanque_state.porcentaje_llenado);
 
     esp_mqtt_client_publish(
         mqtt_get_client(),
@@ -52,7 +57,15 @@ static void publish_tanque_state(void)
         1,
         0);
 }
+static void valvula_on(void)
+{
+    gpio_set_level(PIN_VALVULA_LLENADO, RELAY_ACTIVE_LEVEL);
+}
 
+static void valvula_off(void)
+{
+    gpio_set_level(PIN_VALVULA_LLENADO, !RELAY_ACTIVE_LEVEL);
+}
 static void listener_task(void *arg)
 {
     QueueHandle_t q = sensores_get_queue();
@@ -73,17 +86,18 @@ static void listener_task(void *arg)
 
             case SENSOR_ULTRASONICO:
                 tanque_state.nivel = msg.valor1;
+                tanque_state.porcentaje_llenado = msg.valor2;
                 // ---- CONTROL DE LLENADO ----
-                if (!valvula_llenado_activa && tanque_state.nivel < NIVEL_MIN)
+                if (!valvula_llenado_activa && tanque_state.porcentaje_llenado < NIVEL_MIN)
                 {
-                    gpio_set_level(PIN_VALVULA_LLENADO, 1);
+                    valvula_on();
                     valvula_llenado_activa = true;
                     ESP_LOGI(TAG, "Valvula ACTIVADA (nivel bajo)");
                 }
 
-                else if (valvula_llenado_activa && tanque_state.nivel > NIVEL_MAX)
+                else if (valvula_llenado_activa && tanque_state.porcentaje_llenado > NIVEL_MAX)
                 {
-                    gpio_set_level(PIN_VALVULA_LLENADO, 0);
+                    valvula_off();
                     valvula_llenado_activa = false;
                     ESP_LOGI(TAG, "Valvula DESACTIVADA (nivel alto)");
                 }
@@ -116,7 +130,7 @@ void listener_init(void)
         .intr_type = GPIO_INTR_DISABLE};
     gpio_config(&io_conf);
 
-    gpio_set_level(PIN_VALVULA_LLENADO, 0); // apagada al inicio
+    valvula_off();
 
     xTaskCreatePinnedToCore(
         listener_task,
