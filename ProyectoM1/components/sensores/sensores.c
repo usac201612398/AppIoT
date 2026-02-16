@@ -25,8 +25,8 @@ static const char *TAG = "SENSORES";
 static adc_oneshot_unit_handle_t adc_handle;
 static QueueHandle_t sensor_queue;
 static dht11_t dht11_sensor;
-static int32_t peso_offset = 83450.5;
-static float peso_factor = 1000.0; // calibrar
+static int32_t peso_offset = -124000;
+static float peso_factor = -479333; // calibrar
 
 static void peso_task(void *arg)
 {
@@ -46,7 +46,7 @@ static void peso_task(void *arg)
 
         xQueueSend(sensor_queue, &msg, 0);
 
-        ESP_LOGI("PESO", "Peso: %.2f kg (raw=%ld)", peso, raw);
+        ESP_LOGI("PESO", "Enviando Queue Peso: %.2f kg (raw=%ld)", peso, raw);
 
         vTaskDelay(pdMS_TO_TICKS(2000));
     }
@@ -102,7 +102,7 @@ static void suelo_task(void *arg)
 
         xQueueSend(sensor_queue, &msg, 0);
 
-        ESP_LOGI("SUELO", "Humedad: %.1f%% (raw=%d)", humedad, adc_raw);
+        ESP_LOGI("SUELO", "Enviando Queue Humedad: %.1f%% (raw=%d)", humedad, adc_raw);
 
         vTaskDelay(pdMS_TO_TICKS(2000));
     }

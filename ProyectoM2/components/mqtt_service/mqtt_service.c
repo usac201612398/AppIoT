@@ -6,6 +6,9 @@
 // #define PASS_MQTT "nuevacontraseña"
 #define BROKER "mqtts://a4810e38lk0oy-ats.iot.us-east-1.amazonaws.com/8883"
 #define TOPIC_PLANTA "casa/planta01/data"
+#define TOPIC_LLENADO_MANUAL "casa/tanque01/llenado/manual"
+#define TOPIC_RIEGO_MANUAL "casa/tanque01/riego/manual"
+static planta_state_t planta_state = {0};
 static const char aws_root_ca_pem[] =
     "-----BEGIN CERTIFICATE-----\n"
     "MIIDQTCCAimgAwIBAgITBmyfz5m/jAo54vB4ikPmljZbyjANBgkqhkiG9w0BAQsF\n"
@@ -100,12 +103,39 @@ static void mqtt_parse_planta_data(const char *data)
 
     if (temp && hum && suelo && peso)
     {
+        planta_state.temp_amb = temp->valuedouble;
+        planta_state.hum_amb = hum->valuedouble;
+        planta_state.hum_suelo = suelo->valuedouble;
+        planta_state.peso = peso->valuedouble;
         ESP_LOGI(TAG,
                  "Planta -> T:%.2f H:%.2f S:%.2f P:%.2f",
                  temp->valuedouble,
                  hum->valuedouble,
                  suelo->valuedouble,
                  peso->valuedouble);
+    }
+
+    cJSON_Delete(root);
+}
+
+static void mqtt_parse_manual(const char *topic, const char *data)
+{
+    cJSON *root = cJSON_Parse(data);
+    if (!root)
+        return;
+
+    cJSON *accion = cJSON_GetObjectItem(root, "accion");
+    ESP_LOGI(TAG, "mqtt_parse_manual: accion recibida = '%s'", accion->valuestring);
+    if (accion && cJSON_IsString(accion))
+    {
+        if (strcmp(topic, TOPIC_LLENADO_MANUAL) == 0)
+        {
+            listener_manual_llenado(accion->valuestring);
+        }
+        else if (strcmp(topic, TOPIC_RIEGO_MANUAL) == 0)
+        {
+            listener_manual_riego(accion->valuestring);
+        }
     }
 
     cJSON_Delete(root);
@@ -127,7 +157,13 @@ static void mqtt_handle_preparar_data(esp_mqtt_event_handle_t event)
     {
         mqtt_parse_planta_data(data);
     }
+    else if (strcmp(topic, TOPIC_LLENADO_MANUAL) == 0 ||
+             strcmp(topic, TOPIC_RIEGO_MANUAL) == 0)
+    {
+        mqtt_parse_manual(topic, data);
+    }
 }
+
 static void mqtt_event_handler(void *handler_args,
                                esp_event_base_t base,
                                int32_t event_id,
@@ -141,6 +177,8 @@ static void mqtt_event_handler(void *handler_args,
         ESP_LOGI(TAG, "MQTT conectado");
         mqtt_connected = true;
         esp_mqtt_client_subscribe(client, TOPIC_PLANTA, 1);
+        esp_mqtt_client_subscribe(client, TOPIC_LLENADO_MANUAL, 1);
+        esp_mqtt_client_subscribe(client, TOPIC_RIEGO_MANUAL, 1);
         break;
 
     case MQTT_EVENT_DISCONNECTED:
@@ -151,7 +189,9 @@ static void mqtt_event_handler(void *handler_args,
     case MQTT_EVENT_DATA:
         mqtt_handle_preparar_data(event);
         break;
-    
+    case MQTT_EVENT_ERROR:
+        ESP_LOGE(TAG, "MQTT EVENT ERROR type=%d", event->error_handle->error_type);
+        break;
     default:
         break;
     }
@@ -181,4 +221,65 @@ esp_mqtt_client_handle_t mqtt_get_client(void)
 bool mqtt_is_connected(void)
 {
     return mqtt_connected;
+}
+
+void mqtt_publicar_estado_valvula(bool abierta, float porcentaje)
+{
+    if (!mqtt_is_connected())
+        return;
+
+    cJSON *root = cJSON_CreateObject();
+    if (!root)
+        return;
+
+    cJSON_AddStringToObject(root, "estado", abierta ? "llenando" : "cerrada");
+    cJSON_AddNumberToObject(root, "porcentaje", porcentaje);
+
+    char *json = cJSON_PrintUnformatted(root);
+    if (json)
+    {
+        esp_mqtt_client_publish(
+            mqtt_get_client(),
+            "casa/tanque01/state",
+            json,
+            0,
+            1,
+            1); // retain activado
+
+        free(json);
+    }
+
+    cJSON_Delete(root);
+}
+
+planta_state_t mqtt_get_planta_state(void)
+{
+    return planta_state;
+}
+
+void mqtt_publicar_estado_riego(bool activo)
+{
+    if (!mqtt_is_connected())
+        return;
+
+    cJSON *root = cJSON_CreateObject();
+    if (!root)
+        return;
+
+    cJSON_AddStringToObject(root, "estado", activo ? "regando" : "detenido");
+
+    char *json = cJSON_PrintUnformatted(root);
+    if (json)
+    {
+        esp_mqtt_client_publish(
+            mqtt_get_client(),
+            "casa/riego/state",
+            json,
+            0,
+            1,
+            1); // retain activado
+        free(json);
+    }
+
+    cJSON_Delete(root);
 }

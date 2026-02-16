@@ -5,24 +5,26 @@
 #include "nvs_flash.h"
 #include "esp_log.h"
 
-#define WIFI_SSID "SEEDS-SR"
-#define WIFI_PASS "S3m1ll@523"
+//#define WIFI_SSID "SEEDS-SR"
+//#define WIFI_PASS "S3m1ll@523"
+#define WIFI_SSID "FAM.PORTILLO"
+#define WIFI_PASS "ZTT45WHK"
 static const char *TAG = "WIFI";
 
 static void event_handler(void* arg, esp_event_base_t event_base,
                           int32_t event_id, void* event_data)
 {
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
-        ESP_LOGI("WIFI", "Intentando conectar...");
+        ESP_LOGI(TAG, "Intentando conectar...");
         esp_wifi_connect();
     } 
     else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
-        ESP_LOGI("WIFI", "Fallo conexión. Reintentando...");
+        ESP_LOGI(TAG, "Fallo conexión. Reintentando...");
         esp_wifi_connect();
     } 
     else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t* event = (ip_event_got_ip_t*) event_data;
-        ESP_LOGI("WIFI", "IP asignada: " IPSTR, IP2STR(&event->ip_info.ip));
+        ESP_LOGI(TAG, "IP asignada: " IPSTR, IP2STR(&event->ip_info.ip));
     }
 }
 

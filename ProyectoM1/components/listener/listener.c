@@ -1,23 +1,21 @@
 #include "listener.h"
 #include "mqtt_service.h"
-
 #include "sensores.h"
 #include "sensor_msg.h"
-
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
-
+#include "cJSON.h"
 #include "esp_log.h"
 
 static const char *TAG = "LISTENER";
 
 typedef struct
 {
-    float soil;
-    float weight;
-    float temp_air;
-    float hum_air;
+    float hum_suelo;
+    float peso;
+    float temp_amb;
+    float hum_amb;
 } planta_state_t;
 
 static planta_state_t planta_state;
@@ -26,27 +24,29 @@ static void publish_planta_state(void)
     if (!mqtt_is_connected())
         return;
 
-    char json[256];
+    cJSON *root = cJSON_CreateObject();
+    if (root == NULL)
+        return; // Manejar error
 
-    snprintf(json, sizeof(json),
-             "{"
-             "\"soil\":%.2f,"
-             "\"weight\":%.2f,"
-             "\"temp_air\":%.2f,"
-             "\"hum_air\":%.2f"
-             "}",
-             planta_state.soil,
-             planta_state.weight,
-             planta_state.temp_air,
-             planta_state.hum_air);
+    cJSON_AddNumberToObject(root, "hum_suelo", planta_state.hum_suelo);
+    cJSON_AddNumberToObject(root, "peso", planta_state.peso);
+    cJSON_AddNumberToObject(root, "temp_amb", planta_state.temp_amb);
+    cJSON_AddNumberToObject(root, "hum_amb", planta_state.hum_amb);
 
-    esp_mqtt_client_publish(
-        mqtt_get_client(),
-        "casa/planta01/data",
-        json,
-        0,
-        1,
-        0);
+    char *json_str = cJSON_PrintUnformatted(root); // Sin espacios innecesarios
+    if (json_str != NULL)
+    {
+        esp_mqtt_client_publish(
+            mqtt_get_client(),
+            "casa/planta01/data",
+            json_str,
+            0,
+            1,
+            0);
+
+        free(json_str); // Liberar memoria
+    }
+    cJSON_Delete(root);
 }
 
 static void listener_task(void *arg)
@@ -62,16 +62,16 @@ static void listener_task(void *arg)
             switch (msg.sensor)
             {
             case SENSOR_SUELO:
-                planta_state.soil = msg.valor1;
+                planta_state.hum_suelo = msg.valor1;
                 break;
 
             case SENSOR_PESO:
-                planta_state.weight = msg.valor1;
+                planta_state.peso = msg.valor1;
                 break;
 
             case SENSOR_DHT11:
-                planta_state.temp_air = msg.valor1;
-                planta_state.hum_air = msg.valor2;
+                planta_state.temp_amb = msg.valor1;
+                planta_state.hum_amb = msg.valor2;
                 break;
 
             default:
