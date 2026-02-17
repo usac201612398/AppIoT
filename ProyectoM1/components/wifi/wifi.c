@@ -5,10 +5,12 @@
 #include "nvs_flash.h"
 #include "esp_log.h"
 
-//#define WIFI_SSID "SEEDS-SR"
+//#define WIFI_SSID "ELVALLE"
 //#define WIFI_PASS "S3m1ll@523"
-#define WIFI_SSID "FAM.PORTILLO"
-#define WIFI_PASS "ZTT45WHK"
+#define WIFI_SSID "ELVALLE"
+#define WIFI_PASS "8A68BEC788"
+//#define WIFI_SSID "FAM.PORTILLO"
+//#define WIFI_PASS "ZTT45WHK"
 static const char *TAG = "WIFI";
 
 static void event_handler(void* arg, esp_event_base_t event_base,

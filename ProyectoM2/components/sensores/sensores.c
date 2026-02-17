@@ -19,7 +19,7 @@
 
 #define DS18B20_GPIO GPIO_NUM_15
 #define MAX_DEVICES 1
-#define ALTURA_TANQUE_CM 40.0
+#define ALTURA_TANQUE_CM 35.0
 #define RELAY_ACTIVE_LEVEL 0   // 
 
 

@@ -28,6 +28,7 @@ static void publish_planta_state(void)
     if (root == NULL)
         return; // Manejar error
 
+    cJSON_AddStringToObject(root,"planta_id","planta_0001");
     cJSON_AddNumberToObject(root, "hum_suelo", planta_state.hum_suelo);
     cJSON_AddNumberToObject(root, "peso", planta_state.peso);
     cJSON_AddNumberToObject(root, "temp_amb", planta_state.temp_amb);
@@ -79,7 +80,7 @@ static void listener_task(void *arg)
             }
         }
 
-        if (xTaskGetTickCount() - last_publish > pdMS_TO_TICKS(5000))
+        if (xTaskGetTickCount() - last_publish > pdMS_TO_TICKS(60000))
         {
             publish_planta_state();
             last_publish = xTaskGetTickCount();

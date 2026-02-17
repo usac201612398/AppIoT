@@ -27,6 +27,9 @@ static QueueHandle_t sensor_queue;
 static dht11_t dht11_sensor;
 static int32_t peso_offset = -124000;
 static float peso_factor = -479333; // calibrar
+TickType_t last_publish = 0;
+const TickType_t publish_period = pdMS_TO_TICKS(60000); // 60 s
+
 
 static void peso_task(void *arg)
 {
@@ -48,7 +51,7 @@ static void peso_task(void *arg)
 
         ESP_LOGI("PESO", "Enviando Queue Peso: %.2f kg (raw=%ld)", peso, raw);
 
-        vTaskDelay(pdMS_TO_TICKS(2000));
+        vTaskDelay(pdMS_TO_TICKS(10000));
     }
 }
 
@@ -72,7 +75,7 @@ static void dht11_task(void *arg)
                      msg.valor1, msg.valor2);
         }
 
-        vTaskDelay(pdMS_TO_TICKS(2000)); // 2 segundos entre lecturas
+        vTaskDelay(pdMS_TO_TICKS(10000)); // 2 segundos entre lecturas
     }
 }
 
@@ -104,7 +107,7 @@ static void suelo_task(void *arg)
 
         ESP_LOGI("SUELO", "Enviando Queue Humedad: %.1f%% (raw=%d)", humedad, adc_raw);
 
-        vTaskDelay(pdMS_TO_TICKS(2000));
+        vTaskDelay(pdMS_TO_TICKS(10000));
     }
 }
 

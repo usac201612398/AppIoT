@@ -23,6 +23,7 @@ static bool valvula_llenado_activa = false;
 bool riego_activo = false;
 bool riego_manual = false;
 bool tanque_manual = false;
+
 static void valvula_on(int valvula)
 {
     gpio_set_level(valvula, 0);
@@ -43,7 +44,7 @@ static void publish_tanque_state(void)
     cJSON *root = cJSON_CreateObject();
     if (!root)
         return;
-
+    cJSON_AddStringToObject(root,"tanque_id","tanque_0001");
     cJSON_AddNumberToObject(root, "nivel", tanque_state.nivel);
     cJSON_AddNumberToObject(root, "caudal", tanque_state.caudal);
     cJSON_AddNumberToObject(root, "temp_agua", tanque_state.temp_agua);
@@ -67,21 +68,21 @@ static void publish_tanque_state(void)
 
 void listener_manual_llenado(const char *accion)
 {
-    if (strcmp(accion, "on") == 0)
+    if (strcmp(accion, "ON") == 0)
     {
         // bloquea automático y fuerza encendido
         tanque_manual = true;
         valvula_on(PIN_VALVULA_LLENADO);
         mqtt_publicar_estado_valvula(true, tanque_state.porcentaje_llenado);
     }
-    else if (strcmp(accion, "off") == 0)
+    else if (strcmp(accion, "OFF") == 0)
     {
         // bloquea automático y fuerza apagado
         tanque_manual = true;
         valvula_off(PIN_VALVULA_LLENADO);
         mqtt_publicar_estado_valvula(false, tanque_state.porcentaje_llenado);
     }
-    else if (strcmp(accion, "auto") == 0)
+    else if (strcmp(accion, "AUTO") == 0)
     {
         tanque_manual = false;
         // toma decisión inmediata
@@ -94,7 +95,7 @@ void listener_manual_llenado(const char *accion)
 
 void listener_manual_riego(const char *accion)
 {
-    if (strcmp(accion, "on") == 0)
+    if (strcmp(accion, "ON") == 0)
     {
         // Modo manual ON → fuerza riego activo
         riego_manual = true; // bloquea automático
@@ -103,7 +104,7 @@ void listener_manual_riego(const char *accion)
         valvula_on(PIN_VALVULA_RIEGO);
         mqtt_publicar_estado_riego(true);
     }
-    else if (strcmp(accion, "off") == 0)
+    else if (strcmp(accion, "OFF") == 0)
     {
         // Modo manual OFF → fuerza riego inactivo
         riego_manual = true;  // bloquea automático
@@ -112,7 +113,7 @@ void listener_manual_riego(const char *accion)
         valvula_off(PIN_VALVULA_RIEGO);
         mqtt_publicar_estado_riego(false);
     }
-    else if (strcmp(accion, "auto") == 0)
+    else if (strcmp(accion, "AUTO") == 0)
     {
         // Salir de modo manual → vuelve automático
         riego_manual = false;
@@ -176,8 +177,9 @@ static void listener_task(void *arg)
         if (!riego_manual)
         {
             if (!riego_activo &&
-                planta.temp_amb > 32.0 &&
-                planta.peso < 100.0 &&
+                planta.temp_amb > 34.0 &&
+                planta.hum_amb < 34.0 &&
+                planta.peso < 0.382 &&
                 planta.hum_suelo < 15.0)
             {
                 ESP_LOGI(TAG, "Activando riego automático");
@@ -202,7 +204,7 @@ static void listener_task(void *arg)
         }
 
         // --- Publicar estado del tanque cada 5s ---
-        if (ahora - last_publish > pdMS_TO_TICKS(15000))
+        if (ahora - last_publish > pdMS_TO_TICKS(2000))
         {
             publish_tanque_state();
             last_publish = ahora;

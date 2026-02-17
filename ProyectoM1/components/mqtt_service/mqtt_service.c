@@ -2,7 +2,11 @@
 #include "esp_log.h"
 
 
-#define BROKER "mqtts://a4810e38lk0oy-ats.iot.us-east-1.amazonaws.com/8883"
+//#define BROKER "mqtts://a4810e38lk0oy-ats.iot.us-east-1.amazonaws.com/8883"
+#define BROKER "mqtt://10.111.112.4/1883"
+#define USER_MQTT "sdc-iot"
+#define PASS_MQTT "nuevacontraseña"
+/*
 static const char aws_root_ca_pem[] = 
 "-----BEGIN CERTIFICATE-----\n" \
 "MIIDQTCCAimgAwIBAgITBmyfz5m/jAo54vB4ikPmljZbyjANBgkqhkiG9w0BAQsF\n" \
@@ -74,7 +78,7 @@ static const char device_cert_pem[] =
 "n8KaqPtMQJolLrK3Ni3d3IF2jsq1vQzu4qw8feFaM/FvgNUgfpjQTUY3mH0S083a\n" \
 "O4DKEADMVlHpCPkrdFxOG/CWlugLs50N9MRRS9YUPH+QuEWvzb6m+UJ/zH15\n" \
 "-----END CERTIFICATE-----\n";
-
+*/
 static const char *TAG = "MQTT_SERVICE";
 static esp_mqtt_client_handle_t client;
 static bool mqtt_connected = false;
@@ -107,11 +111,11 @@ void mqtt_service_init(void)
 {
     esp_mqtt_client_config_t mqtt_cfg = {
         .broker.address.uri = BROKER,
-        .broker.verification.certificate=(const char *)aws_root_ca_pem,
-        .credentials.authentication.certificate=(const char *)device_cert_pem,
-        .credentials.authentication.key=(const char *)private_key_pem
-        //.credentials.username = USER_MQTT,
-        //.credentials.authentication.password = PASS_MQTT,
+        //.broker.verification.certificate=(const char *)aws_root_ca_pem,
+        //.credentials.authentication.certificate=(const char *)device_cert_pem,
+        //.credentials.authentication.key=(const char *)private_key_pem
+        .credentials.username = USER_MQTT,
+        .credentials.authentication.password = PASS_MQTT,
     };
 
     client = esp_mqtt_client_init(&mqtt_cfg);
