@@ -75,7 +75,7 @@ static void dht11_task(void *arg)
                      msg.valor1, msg.valor2);
         }
 
-        vTaskDelay(pdMS_TO_TICKS(10000)); // 2 segundos entre lecturas
+        vTaskDelay(pdMS_TO_TICKS(10000)); // 10 segundos entre lecturas
     }
 }
 
@@ -128,7 +128,7 @@ void sensores_init(void)
 
     hx711_init(HX711_DOUT, HX711_SCK);
 
-    // Calibrar offset inicial (sin peso)
+    
     vTaskDelay(pdMS_TO_TICKS(1000));
     peso_offset = hx711_read();
 

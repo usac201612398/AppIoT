@@ -71,7 +71,7 @@ static void ultrasonico_task(void *arg)
             ESP_LOGW(TAG, "Error medicion: %d", res);
         }
 
-        vTaskDelay(pdMS_TO_TICKS(2000));
+        vTaskDelay(pdMS_TO_TICKS(10000));
     }
 }
 
@@ -140,7 +140,7 @@ static void temperatura_task(void *arg)
             ESP_LOGE(TAG, "Error leyendo temperatura");
         }
 
-        vTaskDelay(pdMS_TO_TICKS(2000));
+        vTaskDelay(pdMS_TO_TICKS(10000));
     }
 }
 

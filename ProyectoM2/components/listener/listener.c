@@ -70,14 +70,14 @@ void listener_manual_llenado(const char *accion)
 {
     if (strcmp(accion, "ON") == 0)
     {
-        // bloquea automático y fuerza encendido
+        
         tanque_manual = true;
         valvula_on(PIN_VALVULA_LLENADO);
         mqtt_publicar_estado_valvula(true, tanque_state.porcentaje_llenado);
     }
     else if (strcmp(accion, "OFF") == 0)
     {
-        // bloquea automático y fuerza apagado
+        
         tanque_manual = true;
         valvula_off(PIN_VALVULA_LLENADO);
         mqtt_publicar_estado_valvula(false, tanque_state.porcentaje_llenado);
@@ -85,7 +85,7 @@ void listener_manual_llenado(const char *accion)
     else if (strcmp(accion, "AUTO") == 0)
     {
         tanque_manual = false;
-        // toma decisión inmediata
+  
         if (tanque_state.porcentaje_llenado < NIVEL_MIN)
             valvula_on(PIN_VALVULA_LLENADO);
         else if (tanque_state.porcentaje_llenado > NIVEL_MAX)
@@ -97,25 +97,24 @@ void listener_manual_riego(const char *accion)
 {
     if (strcmp(accion, "ON") == 0)
     {
-        // Modo manual ON → fuerza riego activo
-        riego_manual = true; // bloquea automático
-        riego_activo = true; // marca que está activo
+    
+        riego_manual = true; 
+        riego_activo = true; 
 
         valvula_on(PIN_VALVULA_RIEGO);
         mqtt_publicar_estado_riego(true);
     }
     else if (strcmp(accion, "OFF") == 0)
     {
-        // Modo manual OFF → fuerza riego inactivo
-        riego_manual = true;  // bloquea automático
-        riego_activo = false; // estado manual OFF
+        
+        riego_manual = true; 
+        riego_activo = false; 
 
         valvula_off(PIN_VALVULA_RIEGO);
         mqtt_publicar_estado_riego(false);
     }
     else if (strcmp(accion, "AUTO") == 0)
     {
-        // Salir de modo manual → vuelve automático
         riego_manual = false;
     }
 }

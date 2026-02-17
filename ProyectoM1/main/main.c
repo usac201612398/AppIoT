@@ -1,7 +1,7 @@
 #include "esp_log.h"
-#include "nvs_flash.h"    // Para nvs_flash_init()
-#include "esp_netif.h"    // Para esp_netif_init()
-#include "esp_event.h"    // Para esp_event_loop_create_default()
+#include "nvs_flash.h"  
+#include "esp_netif.h"    
+#include "esp_event.h"
 
 #include "sensores.h"
 #include "listener.h"

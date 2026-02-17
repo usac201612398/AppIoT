@@ -1,7 +1,7 @@
 #ifndef LISTENER_H
 #define LISTENER_H
+#include "mqtt_service.h" 
 
-#include "mqtt_service.h" // para planta_state_t y tanque_state_t
 extern bool manual_llenado;
 extern bool manual_riego;
 extern bool riego_activo;

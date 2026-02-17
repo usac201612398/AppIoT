@@ -20,7 +20,7 @@ int32_t hx711_read(void)
 {
     int32_t count = 0;
 
-    while (gpio_get_level(pin_dout)); // Esperar listo
+    while (gpio_get_level(pin_dout));
 
     for (int i = 0; i < 24; i++) {
         gpio_set_level(pin_sck, 1);

@@ -2,9 +2,9 @@
 #define MQTT_SERVICE_H
 
 #include <stdbool.h>
-#include "mqtt_client.h"  // necesario para esp_mqtt_client_handle_t
+#include "mqtt_client.h"
 
-// --- Tipos compartidos (una sola vez) ---
+// Tipos compartidos
 typedef struct {
     float temp_amb;
     float hum_amb;
@@ -19,7 +19,7 @@ typedef struct {
     float temp_agua;
 } tanque_state_t;
 
-// --- Funciones públicas ---
+//funciones publicas
 planta_state_t mqtt_get_planta_state(void);
 
 void mqtt_service_init(void);
