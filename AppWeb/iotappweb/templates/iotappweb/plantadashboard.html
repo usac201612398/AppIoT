@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Plantas</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+
+    <style>
+        body {
+            background-color: #f4f6f9;
+        }
+
+        .card {
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            min-height: 120px;
+        }
+
+        .card .card-body {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .card-icon {
+            font-size: 2.5rem;
+            opacity: 0.7;
+        }
+
+        .fs-value {
+            font-size: 1.8rem;
+            font-weight: bold;
+        }
+
+        .card-modern {
+            border-radius: 14px;
+            background: #ffffff;
+            transition: all 0.3s ease;
+            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
+        }
+
+        .card-modern:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
+        }
+
+        .card-label {
+            font-size: 0.85rem;
+            font-weight: 500;
+            margin-bottom: 4px;
+        }
+
+        .card-value {
+            font-size: 1.8rem;
+            font-weight: 700;
+        }
+
+        .icon-circle {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.3rem;
+        }
+
+        #tablaPlantas tbody tr:hover {
+            background-color: rgba(0, 0, 0, 0.05);
+        }
+    </style>
+
+</head>
+
+<body>
+
+    <!-- Promedio acumulado diario -->
+    <div class="container my-4">
+        <h1 class="text-center mb-4 fw-bold">Dashboard de Plantas</h1>
+        <!-- Cards de variables -->
+        <div class="row g-4 justify-content-center">
+
+            <!-- Temperatura -->
+            <div class="col-12 col-md-3">
+                <div id="cardTemp" class="card card-modern border-start border-4 border-danger">
+                    <div class="card-body">
+                        <div>
+                            <div class="card-label text-muted">Temperatura</div>
+                            <div class="card-value text-danger">
+                                <span id="temperatura">0</span> °F
+                            </div>
+                        </div>
+                        <div class="icon-circle bg-danger-subtle text-danger">
+                            <i class="fas fa-thermometer-half"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Humedad Ambiente -->
+            <div class="col-12 col-md-3">
+                <div id="cardHumedadA" class="card card-modern border-start border-4 border-primary">
+                    <div class="card-body">
+                        <div>
+                            <div class="card-label text-muted">Humedad Ambiente</div>
+                            <div class="card-value text-primary">
+                                <span id="humedad_aire">0</span> %
+                            </div>
+                        </div>
+                        <div class="icon-circle bg-primary-subtle text-primary">
+                            <i class="fas fa-wind"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Humedad Suelo -->
+            <div class="col-12 col-md-3">
+                <div id="cardHumedadS" class="card card-modern border-start border-4 border-success">
+                    <div class="card-body">
+                        <div>
+                            <div class="card-label text-muted">Humedad Suelo</div>
+                            <div class="card-value text-success">
+                                <span id="humedad_suelo">0</span> %
+                            </div>
+                        </div>
+                        <div class="icon-circle bg-success-subtle text-success">
+                            <i class="fas fa-seedling"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Peso -->
+            <div class="col-12 col-md-3">
+                <div id="cardPeso" class="card card-modern border-start border-4 border-warning">
+                    <div class="card-body">
+                        <div>
+                            <div class="card-label text-muted">Peso Planta</div>
+                            <div class="card-value text-warning">
+                                <span id="peso">0</span> kg
+                            </div>
+                        </div>
+                        <div class="icon-circle bg-warning-subtle text-warning">
+                            <i class="fas fa-weight-scale"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Filtros -->
+    <div class="container my-3">
+        <div class="row g-3">
+
+            <!-- Planta -->
+            <div class="col-md-3">
+                <select id="plantaSelect" class="form-select">
+                    <option value="">Todas las plantas</option>
+                    {% for planta in plantas %}
+                    <option value="{{ planta }}">{{ planta }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- Desde -->
+            <div class="col-md-3">
+                <input type="datetime-local" id="desde" class="form-control">
+            </div>
+
+            <!-- Hasta -->
+            <div class="col-md-3">
+                <input type="datetime-local" id="hasta" class="form-control">
+            </div>
+
+            <!-- Límite -->
+            <div class="col-md-2">
+                <select id="limite" class="form-select">
+                    <option value="20">20</option>
+                    <option value="50" selected>50</option>
+                    <option value="100">100</option>
+                    <option value="200">200</option>
+                </select>
+            </div>
+
+            <div class="col-md-1">
+                <button class="btn btn-primary w-100" onclick="cargarDatos()">Consultar</button>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Resumen de plantas diario --> 
+    <div class="container my-4">
+        <h3 class="fw-bold mb-3">Últimos Datos por Planta</h3>
+        <div class="table-responsive">
+            <table class="table table-striped table-bordered" id="tablaPlantas">
+                <thead class="table-light">
+                    <tr>
+                        <th>Planta</th>
+                        <th>Temperatura (°F)</th>
+                        <th>Humedad Ambiente (%)</th>
+                        <th>Humedad Suelo (%)</th>
+                        <th>Peso (kg)</th>
+                        <th>Última actualización</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Se llenará dinámicamente con JS -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="text-center mt-3">
+        <button class="btn btn-dark" data-bs-toggle="modal" data-bs-target="#histogramaModal">
+            Histograma
+        </button>
+    </div>
+
+    <!-- Gráfica -->
+    <div class="container my-5">
+        <div class="container my-3">
+            <div class="form-check form-check-inline">
+                <input class="form-check-input" type="checkbox" id="chkTemp" checked>
+                <label class="form-check-label" for="chkTemp">Temperatura</label>
+            </div>
+            <div class="form-check form-check-inline">
+                <input class="form-check-input" type="checkbox" id="chkHumedadA" checked>
+                <label class="form-check-label" for="chkHumedadA">Humedad Ambiente</label>
+            </div>
+            <div class="form-check form-check-inline">
+                <input class="form-check-input" type="checkbox" id="chkHumedadS" checked>
+                <label class="form-check-label" for="chkHumedadS">Humedad Suelo</label>
+            </div>
+            <div class="form-check form-check-inline">
+                <input class="form-check-input" type="checkbox" id="chkPeso" checked>
+                <label class="form-check-label" for="chkPeso">Peso</label>
+            </div>
+        </div>
+
+        <canvas id="sensoresChart" height="200"></canvas>
+        <div class="text-center text-muted my-2">
+            Última actualización: <span id="timestamp">{{ latest.timestamp }}</span>
+        </div>
+    </div>
+
+    <div class="text-center mt-5">
+        <a href="{% url 'riegoshistorial' %}" class="btn btn-success btn-lg rounded-pill">
+            <i class="fas fa-home me-2"></i>Home
+        </a>
+    </div>
+
+    <!-- Modal Histograma -->
+    <div class="modal fade" id="histogramaModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+
+                <div class="modal-header">
+                    <h5 class="modal-title">Histograma de Sensores</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+
+                <div class="modal-body">
+
+                    <!-- Selectores Planta y Variable -->
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <select id="histPlanta" class="form-select">
+                                <option value="">Todas las plantas</option>
+                                {% for planta in plantas %}
+                                <option value="{{ planta }}">{{ planta }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="col-md-6">
+                            <select id="histVariable" class="form-select">
+                                <option value="temperatura">Temperatura</option>
+                                <option value="humedad_aire">Humedad Aire</option>
+                                <option value="humedad_suelo">Humedad Suelo</option>
+                                <option value="peso">Peso</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Filtro por rango de fechas -->
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <input type="datetime-local" id="histDesde" class="form-control" placeholder="Desde">
+                        </div>
+                        <div class="col-md-6">
+                            <input type="datetime-local" id="histHasta" class="form-control" placeholder="Hasta">
+                        </div>
+                    </div>
+
+                    <!-- Gráfico -->
+                    <canvas id="histogramaChart" height="120"></canvas>
+
+                </div>
+
+                <div id="metricas" class="row text-center mt-4"></div>
+
+                <div class="modal-footer">
+                    <button class="btn btn-primary" onclick="cargarHistograma()">Actualizar</button>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Crear gráfica
+        const ctx = document.getElementById('sensoresChart').getContext('2d');
+        const chart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [
+                    { label: 'Temperatura (°F)', data: [], borderColor: '#FF4C4C', backgroundColor: 'rgba(255,76,76,0.2)', tension: 0.3, yAxisID: 'y' },
+                    { label: 'Humedad Ambiente (%)', data: [], borderColor: '#4C6EFF', backgroundColor: 'rgba(76,110,255,0.2)', tension: 0.3, yAxisID: 'y1' },
+                    { label: 'Humedad Suelo (%)', data: [], borderColor: '#28A745', backgroundColor: 'rgba(40,167,69,0.2)', tension: 0.3, yAxisID: 'y1' },
+                    { label: 'Peso (kg)', data: [], borderColor: '#FFC107', backgroundColor: 'rgba(255,193,7,0.2)', tension: 0.3, yAxisID: 'y2' }
+                ]
+            },
+            options: {
+                responsive: true,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    zoom: {
+                        zoom: {
+                            wheel: { enabled: true },
+                            pinch: { enabled: true },
+                            mode: 'x'
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        ticks: { maxTicksLimit: 10, autoSkip: true }  // Menos saturación
+                    },
+                    y: { type: 'linear', display: true, position: 'left', title: { display: true, text: 'Temperatura (°F)' } },
+                    y1: { type: 'linear', display: true, position: 'right', title: { display: true, text: 'Humedad (%)' }, grid: { drawOnChartArea: false } },
+                    y2: { type: 'linear', display: true, position: 'right', title: { display: true, text: 'Peso (kg)' }, grid: { drawOnChartArea: false } }
+                }
+            }
+        });
+
+        // Colores dinámicos según rango
+        function actualizarColores() {
+            let temp = parseFloat(document.getElementById('temperatura').innerText);
+            let humS = parseFloat(document.getElementById('humedad_suelo').innerText);
+
+            let cardTemp = document.getElementById('cardTemp');
+            if (temp > 30) cardTemp.style.background = 'linear-gradient(135deg,#FF4C4C,#FF1F1F)';
+            else if (temp >= 25) cardTemp.style.background = 'linear-gradient(135deg,#FF9F43,#FF6B00)';
+            else cardTemp.style.background = 'linear-gradient(135deg,#4C6EFF,#2A4FFF)';
+
+            let cardHumS = document.getElementById('cardHumedadS');
+            if (humS < 40) cardHumS.style.background = 'linear-gradient(135deg,#FFC107,#E0A800)';
+            else if (humS <= 60) cardHumS.style.background = 'linear-gradient(135deg,#28A745,#1E7E34)';
+            else cardHumS.style.background = 'linear-gradient(135deg,#4C6EFF,#2A4FFF)';
+        }
+
+        // Actualización automática
+        async function cargarDatos() {
+
+            const planta = document.getElementById('plantaSelect').value;
+            const desde = document.getElementById('desde').value;
+            const hasta = document.getElementById('hasta').value;
+            const limite = document.getElementById('limite').value;
+
+            let url = `{% url 'planta_api' %}?limite=${limite}`;
+
+            if (planta) url += `&planta_id=${planta}`;
+            if (desde) url += `&desde=${desde}`;
+            if (hasta) url += `&hasta=${hasta}`;
+
+            const response = await fetch(url);
+            const data = await response.json();
+
+            // Actualizar tarjetas
+            document.getElementById('temperatura').innerText = data.avg_today.temperatura;
+            document.getElementById('humedad_aire').innerText = data.avg_today.humedad_aire;
+            document.getElementById('humedad_suelo').innerText = data.avg_today.humedad_suelo;
+            document.getElementById('peso').innerText = data.avg_today.peso;
+            document.getElementById('timestamp').innerText = data.latest.timestamp;
+
+            // Actualizar gráfica
+            chart.data.labels = data.timestamps;
+            chart.data.datasets[0].data = data.temperatura;
+            chart.data.datasets[1].data = data.humedad_aire;
+            chart.data.datasets[2].data = data.humedad_suelo;
+            chart.data.datasets[3].data = data.peso;
+            // Llenar tabla de últimas lecturas por planta
+            const tbody = document.querySelector("#tablaPlantas tbody");
+            tbody.innerHTML = ""; // limpiar
+
+            for (const [planta, valores] of Object.entries(data.latest_by_planta)) {
+                const tr = document.createElement("tr");
+                tr.innerHTML = `
+                    <td>${planta}</td>
+                    <td>${valores.temperatura}</td>
+                    <td>${valores.humedad_aire}</td>
+                    <td>${valores.humedad_suelo}</td>
+                    <td>${valores.peso}</td>
+                    <td>${valores.timestamp}</td>
+                `;
+                tbody.appendChild(tr);
+            }
+            chart.update();
+            if (data.latest.temperatura > 35) {
+                alert("¡Temperatura Crítica!");
+            }
+        }
+
+        function actualizarVisibilidad() {
+            chart.data.datasets[0].hidden = !document.getElementById('chkTemp').checked;
+            chart.data.datasets[1].hidden = !document.getElementById('chkHumedadA').checked;
+            chart.data.datasets[2].hidden = !document.getElementById('chkHumedadS').checked;
+            chart.data.datasets[3].hidden = !document.getElementById('chkPeso').checked;
+            chart.update();
+        }
+
+        // Detectar cambios en los checkboxes
+        document.getElementById('chkTemp').addEventListener('change', actualizarVisibilidad);
+        document.getElementById('chkHumedadA').addEventListener('change', actualizarVisibilidad);
+        document.getElementById('chkHumedadS').addEventListener('change', actualizarVisibilidad);
+        document.getElementById('chkPeso').addEventListener('change', actualizarVisibilidad);
+
+        const ctxHist = document.getElementById('histogramaChart').getContext('2d');
+
+        const histChart = new Chart(ctxHist, {
+            type: 'bar',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Frecuencia',
+                    data: [],
+                    backgroundColor: 'rgba(54,162,235,0.6)'
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    x: { title: { display: true, text: 'Rango' } },
+                    y: { title: { display: true, text: 'Frecuencia' } }
+                }
+            }
+        });
+
+        async function cargarHistograma() {
+            const planta = document.getElementById("histPlanta").value;
+            const variable = document.getElementById("histVariable").value;
+            const desde = document.getElementById("histDesde").value;
+            const hasta = document.getElementById("histHasta").value;
+
+            let url = `{% url 'histograma_api' %}?variable=${variable}`;
+            if (planta) url += `&planta_id=${planta}`;
+            if (desde) url += `&desde=${desde}`;
+            if (hasta) url += `&hasta=${hasta}`;
+
+            try {
+                const response = await fetch(url);
+                if (!response.ok) throw new Error("HTTP " + response.status);
+                const data = await response.json();
+
+                // Actualizar gráfico
+                histChart.data.labels = data.bins;
+                histChart.data.datasets[0].data = data.counts;
+                histChart.update();
+
+                // Actualizar métricas
+                const metricasDiv = document.getElementById("metricas");
+                const cv = data.media ? (data.std / data.media) * 100 : 0;
+                metricasDiv.innerHTML = `
+            <div class="col-md-2"><div class="card p-2 shadow-sm"><small>Media</small><h5>${data.media.toFixed(2)}</h5></div></div>
+            <div class="col-md-2"><div class="card p-2 shadow-sm"><small>Mediana</small><h5>${data.mediana.toFixed(2)}</h5></div></div>
+            <div class="col-md-2"><div class="card p-2 shadow-sm"><small>Desv. Est.</small><h5>${data.std.toFixed(2)}</h5></div></div>
+            <div class="col-md-2"><div class="card p-2 shadow-sm"><small>Mín</small><h5>${data.min.toFixed(2)}</h5></div></div>
+            <div class="col-md-2"><div class="card p-2 shadow-sm"><small>Máx</small><h5>${data.max.toFixed(2)}</h5></div></div>
+            <div class="col-md-2"><div class="card p-2 shadow-sm"><small>Total Med.</small><h5>${data.total_mediciones}</h5></div></div>
+        `;
+            } catch (error) {
+                console.error("Error cargando histograma:", error);
+                alert("Error cargando histograma.");
+            }
+        }
+        
+        actualizarColores();
+        setInterval(cargarDatos, 60000); // cada 1 minuto
+        document.addEventListener('DOMContentLoaded', () => {
+            cargarDatos();
+        });
+
+    </script>
+</body>
+</html>

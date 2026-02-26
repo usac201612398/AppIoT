@@ -13,6 +13,7 @@ typedef struct {
     sensor_id_t sensor;
     float valor1;
     float valor2;
+    float valor3;
     uint32_t timestamp_ms;
 } sensor_msg_t;
 

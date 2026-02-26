@@ -7,6 +7,8 @@
 #include "freertos/queue.h"
 #include "cJSON.h"
 #include "esp_log.h"
+#include "esp_system.h"
+#include "esp_random.h"
 
 static const char *TAG = "LISTENER";
 
@@ -16,9 +18,11 @@ typedef struct
     float peso;
     float temp_amb;
     float hum_amb;
+    float ts;
 } planta_state_t;
 
 static planta_state_t planta_state;
+
 static void publish_planta_state(void)
 {
     if (!mqtt_is_connected())
@@ -33,13 +37,15 @@ static void publish_planta_state(void)
     cJSON_AddNumberToObject(root, "peso", planta_state.peso);
     cJSON_AddNumberToObject(root, "temp_amb", planta_state.temp_amb);
     cJSON_AddNumberToObject(root, "hum_amb", planta_state.hum_amb);
+    cJSON_AddNumberToObject(root, "ts", planta_state.ts);
 
     char *json_str = cJSON_PrintUnformatted(root); // Sin espacios innecesarios
     if (json_str != NULL)
     {
+        //vTaskDelay(pdMS_TO_TICKS(50 + (esp_random() % 50))); // 50-100 ms de delay
         esp_mqtt_client_publish(
             mqtt_get_client(),
-            "casa/planta01/data",
+            "casa/planta/1/data",
             json_str,
             0,
             1,
@@ -52,6 +58,7 @@ static void publish_planta_state(void)
 
 static void listener_task(void *arg)
 {
+    vTaskDelay(pdMS_TO_TICKS(esp_random() % 100));
     QueueHandle_t q = sensores_get_queue();
     sensor_msg_t msg;
     TickType_t last_publish = xTaskGetTickCount();
@@ -80,7 +87,7 @@ static void listener_task(void *arg)
             }
         }
 
-        if (xTaskGetTickCount() - last_publish > pdMS_TO_TICKS(60000))
+        if (xTaskGetTickCount() - last_publish > pdMS_TO_TICKS(30000))
         {
             publish_planta_state();
             last_publish = xTaskGetTickCount();

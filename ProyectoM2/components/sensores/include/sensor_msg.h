@@ -16,4 +16,4 @@ typedef struct {
     uint32_t timestamp_ms;
 } sensor_msg_t;
 
-#endif // SENSOR_MSG_H
+#endif

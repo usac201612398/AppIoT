@@ -8,4 +8,6 @@ idf_component_register(
         freertos
         mqtt_service
         json
+        esp_system
+
 )

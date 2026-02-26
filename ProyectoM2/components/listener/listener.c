@@ -8,34 +8,218 @@
 #include "esp_log.h"
 #include "driver/gpio.h"
 #include "cJSON.h"
+#include <stdbool.h> 
 
 #define PIN_VALVULA_LLENADO 27
-#define PIN_VALVULA_RIEGO 26
-#define RELAY_ACTIVE_LEVEL 0
+#define PIN_BOMBA 32
 
-#define NIVEL_MIN 20.0        // porcentaje
-#define NIVEL_MAX 80.0        // porcentaje
-#define TIEMPO_RIEGO_MS 20000 // Son 20 segundos de riego
+#define PIN_VALVULA_ZONA1 25
+#define PIN_VALVULA_ZONA2 33
+
+#define NUM_ZONAS 2
+
+#define NIVEL_MIN 20.0
+#define NIVEL_MAX 80.0
+
+#define TIEMPO_RIEGO_MS 20000
+
+typedef struct
+{
+    bool activa;
+    bool manual;
+    float litros_acumulados;
+    TickType_t fin_riego;
+} zona_riego_t;
+
+typedef enum
+{
+    CMD_NONE = 0,
+    CMD_LLENADO_ON,
+    CMD_LLENADO_OFF,
+    CMD_LLENADO_AUTO
+} listener_cmd_t;
 
 static const char *TAG = "LISTENER";
+// static QueueHandle_t cmd_queue;
+
 static tanque_state_t tanque_state = {0};
+static zona_riego_t zonas[NUM_ZONAS] = {0};
+
+static int pines_zonas[NUM_ZONAS] = {
+    PIN_VALVULA_ZONA1,
+    PIN_VALVULA_ZONA2};
+
+static bool bomba_activa = false;
 static bool valvula_llenado_activa = false;
-bool riego_activo = false;
-bool riego_manual = false;
-bool tanque_manual = false;
+static bool tanque_manual = false;
 
-static void valvula_on(int valvula)
+/*
+   CONTROL BOMBA
+*/
+static void actualizar_bomba()
 {
-    gpio_set_level(valvula, 0);
-    vTaskDelay(pdMS_TO_TICKS(1000));
+    bool alguna_activa = false;
+
+    for (int i = 0; i < NUM_ZONAS; i++)
+    {
+        if (zonas[i].activa)
+        {
+            alguna_activa = true;
+            break;
+        }
+    }
+
+    // Verificamos si el tanque tiene suficiente agua (porcentaje de llenado > mínimo)
+    /*
+    if (tanque_state.porcentaje_llenado < 5.0) // Umbral mínimo
+    {
+        ESP_LOGW(TAG, "El tanque está vacío o casi vacío. No se activará la bomba.");
+        if (bomba_activa)
+        {
+            gpio_set_level(PIN_BOMBA, 1);
+            bomba_activa = false;
+            ESP_LOGW(TAG, "Bomba apagada por nivel bajo de tanque");
+        }
+        return; // No activar la bomba si el nivel es bajo
+    }
+    */
+    // Verificación con el sensor ultrasonico
+    if (tanque_state.nivel < 0.0 || tanque_state.nivel > 35.0)
+    {
+        ESP_LOGE(TAG, "Error: El sensor ultrasónico no está proporcionando datos válidos.");
+        return; // No activar la bomba si el sensor falla
+    }
+
+    if (alguna_activa && !bomba_activa)
+    {
+        gpio_set_level(PIN_BOMBA, 0);
+        bomba_activa = true;
+        ESP_LOGI(TAG, "Bomba ON");
+    }
+    else if (!alguna_activa && bomba_activa)
+    {
+        gpio_set_level(PIN_BOMBA, 1);
+        bomba_activa = false;
+        ESP_LOGI(TAG, "Bomba OFF");
+    }
 }
 
-static void valvula_off(int valvula)
+/*
+   INICIAR RIEGO
+*/
+static void iniciar_riego(int zona, int tiempo_ms)
 {
-    gpio_set_level(valvula, 1);
-    vTaskDelay(pdMS_TO_TICKS(1000));
+    if (zona >= NUM_ZONAS)
+        return;
+    /*
+    if (tanque_state.temp_agua > 45.0)
+
+    {
+        ESP_LOGW(TAG, "Riego bloqueado por temperatura alta del agua");
+        return;
+    }
+    */
+    gpio_set_level(pines_zonas[zona], 0);
+    zonas[zona].activa = true;
+    zonas[zona].fin_riego =
+        xTaskGetTickCount() + pdMS_TO_TICKS(tiempo_ms);
+
+    actualizar_bomba();
+
+    ESP_LOGI(TAG, "Zona %d iniciada", zona + 1);
 }
 
+/*
+CONTADOR DE LITROS
+*/
+static void publish_riego_resumen(int zona, float litros, bool manual)
+{
+    if (!mqtt_is_connected())
+        return;
+
+    cJSON *root = cJSON_CreateObject();
+    if (!root)
+        return;
+
+    cJSON_AddNumberToObject(root, "zona", zona + 1);
+    cJSON_AddNumberToObject(root, "litros_usados", litros);
+    cJSON_AddBoolToObject(root, "manual", manual);
+
+    char *json = cJSON_PrintUnformatted(root);
+
+    if (json)
+    {
+        esp_mqtt_client_publish(
+            mqtt_get_client(),
+            "casa/tanque/1/riego_resumen",
+            json,
+            0,
+            1,
+            0);
+
+        free(json);
+    }
+
+    cJSON_Delete(root);
+}
+
+/*
+   DETENER RIEGO
+*/
+static void detener_riego(int zona)
+{
+    if (zona >= NUM_ZONAS)
+        return;
+
+    zonas[zona].activa = false;
+
+    actualizar_bomba();
+    gpio_set_level(pines_zonas[zona], 1);
+
+    ESP_LOGI(TAG, "Zona %d detenida", zona + 1);
+    ESP_LOGI(TAG, "Zona %d usó %.2f litros",
+             zona + 1,
+             zonas[zona].litros_acumulados);
+
+    // Publicar resumen
+    publish_riego_resumen(
+        zona,
+        zonas[zona].litros_acumulados,
+        zonas[zona].manual);
+
+    // Reset contador
+    zonas[zona].litros_acumulados = 0;
+}
+
+/*
+LLENADO MANUAL
+*/
+void listener_manual_llenado(const char *accion)
+{
+    if (strcmp(accion, "ON") == 0)
+    {
+        tanque_manual = true;
+        valvula_llenado_activa = true;
+        gpio_set_level(PIN_VALVULA_LLENADO, 1);
+        ESP_LOGI(TAG, "Llenado manual ON");
+    }
+    else if (strcmp(accion, "OFF") == 0)
+    {
+        tanque_manual = true;
+        valvula_llenado_activa = false;
+        gpio_set_level(PIN_VALVULA_LLENADO, 0);
+        ESP_LOGI(TAG, "Llenado manual OFF");
+    }
+    else if (strcmp(accion, "AUTO") == 0)
+    {
+        tanque_manual = false;
+        ESP_LOGI(TAG, "Llenado modo AUTO");
+    }
+}
+
+/*
+   PUBLICAR TANQUE
+*/
 static void publish_tanque_state(void)
 {
     if (!mqtt_is_connected())
@@ -44,96 +228,103 @@ static void publish_tanque_state(void)
     cJSON *root = cJSON_CreateObject();
     if (!root)
         return;
-    cJSON_AddStringToObject(root,"tanque_id","tanque_0001");
+
+    cJSON_AddStringToObject(root, "tanque_id", "tanque_0001");
     cJSON_AddNumberToObject(root, "nivel", tanque_state.nivel);
     cJSON_AddNumberToObject(root, "caudal", tanque_state.caudal);
     cJSON_AddNumberToObject(root, "temp_agua", tanque_state.temp_agua);
     cJSON_AddNumberToObject(root, "porcentaje_llenado", tanque_state.porcentaje_llenado);
 
-    char *json_str = cJSON_PrintUnformatted(root);
-    if (json_str)
+    char *json = cJSON_PrintUnformatted(root);
+
+    if (json)
     {
         esp_mqtt_client_publish(
             mqtt_get_client(),
-            "casa/tanque01/data",
-            json_str,
+            "casa/tanque/1/data",
+            json,
             0,
             1,
             0);
-        free(json_str);
+
+        free(json);
     }
 
     cJSON_Delete(root);
 }
 
-void listener_manual_llenado(const char *accion)
+/*
+RIEGO MANUAL
+*/
+void listener_riego_manual(int zona, const char *accion, int tiempo_ms)
 {
+    if (zona < 1 || zona > NUM_ZONAS)
+        return;
+
+    int index = zona - 1;
+    publicar_historial_riego(zona, accion, tiempo_ms, true); // true = manual
+    zonas[index].manual = true;
+
     if (strcmp(accion, "ON") == 0)
     {
-        
-        tanque_manual = true;
-        valvula_on(PIN_VALVULA_LLENADO);
-        mqtt_publicar_estado_valvula(true, tanque_state.porcentaje_llenado);
+        iniciar_riego(index, tiempo_ms);
     }
     else if (strcmp(accion, "OFF") == 0)
     {
-        
-        tanque_manual = true;
-        valvula_off(PIN_VALVULA_LLENADO);
-        mqtt_publicar_estado_valvula(false, tanque_state.porcentaje_llenado);
+        detener_riego(index);
     }
     else if (strcmp(accion, "AUTO") == 0)
     {
-        tanque_manual = false;
-  
-        if (tanque_state.porcentaje_llenado < NIVEL_MIN)
-            valvula_on(PIN_VALVULA_LLENADO);
-        else if (tanque_state.porcentaje_llenado > NIVEL_MAX)
-            valvula_off(PIN_VALVULA_LLENADO);
+        zonas[index].manual = false;
     }
 }
 
-void listener_manual_riego(const char *accion)
+static void riego_automatico(int zona)
 {
-    if (strcmp(accion, "ON") == 0)
+    if (zonas[zona].manual || zonas[zona].activa)
+        return;
+    /*
+    if (tanque_state.temp_agua > 45.0)
     {
-    
-        riego_manual = true; 
-        riego_activo = true; 
-
-        valvula_on(PIN_VALVULA_RIEGO);
-        mqtt_publicar_estado_riego(true);
+        ESP_LOGW(TAG, "Riego bloqueado por temperatura alta del agua");
+        return;
     }
-    else if (strcmp(accion, "OFF") == 0)
+    */
+    planta_state_t planta = mqtt_get_planta_state(zona); // zona debe ser una variable int porque asi se definio la estructura en el json 
+    if (planta.temp_amb > 34.0 && planta.hum_amb < 34.0 && planta.hum_suelo < 15.0)
     {
-        
-        riego_manual = true; 
-        riego_activo = false; 
-
-        valvula_off(PIN_VALVULA_RIEGO);
-        mqtt_publicar_estado_riego(false);
-    }
-    else if (strcmp(accion, "AUTO") == 0)
-    {
-        riego_manual = false;
+        iniciar_riego(zona, TIEMPO_RIEGO_MS);
+        publicar_historial_riego(zona + 1, "ON", TIEMPO_RIEGO_MS, false);
     }
 }
 
+/*
+   LISTENER TASK
+*/
 static void listener_task(void *arg)
 {
     QueueHandle_t q = sensores_get_queue();
     sensor_msg_t msg;
+
     TickType_t last_publish = xTaskGetTickCount();
-    TickType_t riego_end = 0;
 
     while (1)
     {
-        if (xQueueReceive(q, &msg, portMAX_DELAY))
+        /* PROCESAR SENSORES */
+        if (xQueueReceive(q, &msg, pdMS_TO_TICKS(100)))
         {
             switch (msg.sensor)
             {
             case SENSOR_CAUDAL:
                 tanque_state.caudal = msg.valor1;
+                for (int i = 0; i < NUM_ZONAS; i++)
+                {
+                    if (zonas[i].activa)
+                    {
+                        float litros_intervalo = msg.valor1 * (2.0 / 60.0);
+                        zonas[i].litros_acumulados += litros_intervalo;
+                    }
+                }
                 break;
 
             case SENSOR_ULTRASONICO:
@@ -142,20 +333,19 @@ static void listener_task(void *arg)
 
                 if (!tanque_manual)
                 {
-                    if (!valvula_llenado_activa && tanque_state.porcentaje_llenado < NIVEL_MIN)
+                    if (!valvula_llenado_activa &&
+                        tanque_state.porcentaje_llenado < NIVEL_MIN)
                     {
-                        valvula_on(PIN_VALVULA_LLENADO);
-                        valvula_llenado_activa = true;
-                        mqtt_publicar_estado_valvula(true, tanque_state.porcentaje_llenado);
+                        gpio_set_level(PIN_VALVULA_LLENADO, 1);
+                        valvula_llenado_activa = true;  
                     }
-                    else if (valvula_llenado_activa && tanque_state.porcentaje_llenado > NIVEL_MAX)
+                    else if (valvula_llenado_activa &&
+                             tanque_state.porcentaje_llenado > NIVEL_MAX)
                     {
-                        valvula_off(PIN_VALVULA_LLENADO);
+                        gpio_set_level(PIN_VALVULA_LLENADO, 0);
                         valvula_llenado_activa = false;
-                        mqtt_publicar_estado_valvula(false, tanque_state.porcentaje_llenado);
                     }
                 }
-
                 break;
 
             case SENSOR_TEMP:
@@ -163,68 +353,63 @@ static void listener_task(void *arg)
                 break;
 
             default:
-
                 break;
             }
         }
-
-        // Obtener estado de planta inbound
-        planta_state_t planta = mqtt_get_planta_state();
         TickType_t ahora = xTaskGetTickCount();
 
-        // Si no estamos en modo manual, aplicar automático
-        if (!riego_manual)
+        /* CONTROL DE TIMEOUT ZONAS */
+        for (int i = 0; i < NUM_ZONAS; i++)
         {
-            if (!riego_activo &&
-                planta.temp_amb > 34.0 &&
-                planta.hum_amb < 34.0 &&
-                planta.peso < 0.382 &&
-                planta.hum_suelo < 15.0)
+            if (zonas[i].activa &&
+                (int32_t)(ahora - zonas[i].fin_riego) >= 0)
             {
-                ESP_LOGI(TAG, "Activando riego automático");
-
-                valvula_on(PIN_VALVULA_RIEGO);
-                riego_activo = true; // marca que hay riego automático
-                riego_end = ahora + pdMS_TO_TICKS(TIEMPO_RIEGO_MS);
-
-                mqtt_publicar_estado_riego(true);
+                detener_riego(i);
             }
         }
 
-        // Si está activo (manual o automático) y se terminó el tiempo
-        if (riego_activo && !riego_manual && ahora >= riego_end)
+        /* LÓGICA AUTOMÁTICA */
+        // planta_state_t planta = mqtt_get_planta_state();
+
+        for (int i = 0; i < NUM_ZONAS; i++)
         {
-            ESP_LOGI(TAG, "Riego automático finalizado");
-
-            valvula_off(PIN_VALVULA_RIEGO);
-            riego_activo = false;
-
-            mqtt_publicar_estado_riego(false);
+            riego_automatico(i);
         }
-
-        // --- Publicar estado del tanque cada 5s ---
-        if (ahora - last_publish > pdMS_TO_TICKS(2000))
+        /* PUBLICACIÓN PERIÓDICA */
+        if ((int32_t)(ahora - last_publish) >= pdMS_TO_TICKS(10000))
         {
             publish_tanque_state();
             last_publish = ahora;
         }
 
-        vTaskDelay(pdMS_TO_TICKS(100));
+        // vTaskDelay(pdMS_TO_TICKS(10));
     }
 }
 
+/* 
+   INIT
+ */
 void listener_init(void)
 {
+    // cmd_queue = xQueueCreate(5, sizeof(listener_cmd_t));
+
     gpio_config_t io_conf = {
-        .pin_bit_mask = (1ULL << PIN_VALVULA_LLENADO) | (1ULL << PIN_VALVULA_RIEGO),
+        .pin_bit_mask =
+            (1ULL << PIN_VALVULA_LLENADO) |
+            (1ULL << PIN_VALVULA_ZONA1) |
+            (1ULL << PIN_VALVULA_ZONA2) |
+            (1ULL << PIN_BOMBA),
         .mode = GPIO_MODE_OUTPUT,
         .pull_up_en = GPIO_PULLUP_DISABLE,
         .pull_down_en = GPIO_PULLDOWN_DISABLE,
         .intr_type = GPIO_INTR_DISABLE};
+
     gpio_config(&io_conf);
 
-    valvula_off(PIN_VALVULA_LLENADO);
-    valvula_off(PIN_VALVULA_RIEGO);
+    gpio_set_level(PIN_VALVULA_LLENADO, 1);
+    gpio_set_level(PIN_VALVULA_ZONA1, 1);
+    gpio_set_level(PIN_VALVULA_ZONA2, 1);
+    gpio_set_level(PIN_BOMBA, 1);
 
     xTaskCreatePinnedToCore(
         listener_task,
@@ -236,4 +421,5 @@ void listener_init(void)
         1);
 
     ESP_LOGI(TAG, "Listener iniciado");
+
 }

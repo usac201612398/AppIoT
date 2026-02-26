@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="es">
+{% load static %}
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Registro de Riegos</title>
+
+    <!-- Bootstrap + Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        body {
+            background-color: #f4f6f9;
+        }
+
+        .table-header {
+            background: linear-gradient(to right, #6c757d, #495057);
+            color: white;
+            font-weight: 600;
+            border-radius: 8px;
+            padding: 12px 0;
+        }
+
+        .accordion-item {
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .accordion-button {
+            background-color: #ffffff;
+            transition: all 0.3s ease;
+            padding: 12px 0;
+        }
+
+        .accordion-button:hover {
+            background-color: #f1f3f5;
+        }
+
+        .accordion-button:not(.collapsed) {
+            background: linear-gradient(90deg, #198754, #20c997);
+            color: white;
+        }
+
+        .badge-status {
+            font-size: 0.8rem;
+            padding: 6px 10px;
+        }
+
+        .sensor-box {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+        }
+
+        @media (max-width: 768px) {
+            .table-header {
+                display: none;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container py-4">
+
+        <!-- Botones superiores -->
+        <div class="d-flex flex-wrap gap-2 mb-4 justify-content-between">
+            <a href="{% url 'tanquedashboard' %}" class="btn btn-success flex-fill text-center">
+                <i class="fas fa-chart-line"></i> Tanque y riego
+            </a>
+
+            <a href="{% url 'plantadashboard' %}" class="btn btn-success flex-fill text-center">
+                <i class="fas fa-leaf"></i> Plantas
+            </a>
+        </div>
+
+        <h4 class="mb-3 text-success">
+            <i class="fas fa-droplet"></i> Historial de Riegos (Últimos 7 días)
+        </h4>
+
+        <!-- Encabezado tipo tabla -->
+        <div class="container-fluid table-header text-center mb-2 d-none d-md-block">
+            <div class="row">
+                <div class="col-md-1">Registro</div>
+                <div class="col-md-2">Fecha</div>
+                <div class="col-md-1">Zona</div>
+                <div class="col-md-1">Acción</div>
+                <div class="col-md-2">Tiempo</div>
+                <div class="col-md-2">Modo</div>
+            </div>
+        </div>
+
+        <!-- Acordeón -->
+        <div class="accordion" id="riegoAccordion">
+
+            {% for registro in riegos %}
+            <div class="accordion-item shadow-sm mb-2 border-0">
+
+                <h2 class="accordion-header">
+                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
+                        data-bs-target="#collapse{{ registro.registro }}" aria-expanded="false">
+
+                        <div class="container-fluid">
+                            <div class="row w-100 text-center align-items-center">
+
+                                <div class="col-md-1 fw-bold">
+                                    #{{ registro.registro }}
+                                </div>
+
+                                <div class="col-md-2">
+                                    {{ registro.fecha|date:"d/m/Y H:i" }}
+                                </div>
+
+                                <div class="col-md-1">
+                                    Zona {{ registro.zona }}
+                                </div>
+
+                                <div class="col-md-1">
+                                    {% if registro.accion == "ON" %}
+                                    <span class="badge bg-success badge-status">ON</span>
+                                    {% else %}
+                                    <span class="badge bg-danger badge-status">OFF</span>
+                                    {% endif %}
+                                </div>
+
+                                <div class="col-md-2">
+                                    {{ registro.tiempo_segundos }} s
+                                </div>
+
+                                <div class="col-md-2">
+                                    {% if registro.modo == "AUTO" %}
+                                    <span class="badge bg-primary badge-status">AUTO</span>
+                                    {% else %}
+                                    <span class="badge bg-warning text-dark badge-status">MANUAL</span>
+                                    {% endif %}
+                                </div>
+
+                            </div>
+                        </div>
+
+                    </button>
+                </h2>
+
+                <div id="collapse{{ registro.registro }}" class="accordion-collapse collapse"
+                    data-bs-parent="#riegoAccordion">
+
+                    <div class="accordion-body bg-light">
+
+                        <div class="row">
+
+                            {% if registro.planta_reg %}
+                            <div class="col-md-6 mb-3">
+                                <div class="sensor-box shadow-sm">
+                                    <h6 class="text-success">
+                                        <i class="fas fa-leaf"></i> Sensor Planta
+                                    </h6>
+                                    <ul class="list-unstyled mb-0">
+                                        <li><strong>ID:</strong> {{ registro.planta_reg.planta_id }}</li>
+                                        <li>Temp: {{ registro.planta_reg.temperatura }} °C</li>
+                                        <li>Hum Aire: {{ registro.planta_reg.humedad_aire }} %</li>
+                                        <li>Hum Suelo: {{ registro.planta_reg.humedad_suelo }} %</li>
+                                        <li>Peso: {{ registro.planta_reg.peso }} kg</li>
+                                    </ul>
+                                </div>
+                            </div>
+                            {% endif %}
+
+                            {% if registro.tanque_reg %}
+                            <div class="col-md-6 mb-3">
+                                <div class="sensor-box shadow-sm">
+                                    <h6 class="text-primary">
+                                        <i class="fas fa-water"></i> Sensor Tanque
+                                    </h6>
+                                    <ul class="list-unstyled mb-0">
+                                        <li><strong>ID:</strong> {{ registro.tanque_reg.tanque_id }}</li>
+                                        <li>Temp Agua: {{ registro.tanque_reg.temperatura }} °C</li>
+                                        <li>Caudal: {{ registro.tanque_reg.caudal }} L/min</li>
+                                        <li>Llenado: {{ registro.tanque_reg.porcentaje_llenado }} %</li>
+                                        <li>Nivel: {{ registro.tanque_reg.nivel }} cm</li>
+                                    </ul>
+                                </div>
+                            </div>
+                            {% endif %}
+
+                        </div>
+
+                    </div>
+                </div>
+
+            </div>
+            {% empty %}
+            <div class="alert alert-info">
+                No hay registros de riego esta semana.
+            </div>
+            {% endfor %}
+
+        </div>
+
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
+
+</body>
+
+</html>

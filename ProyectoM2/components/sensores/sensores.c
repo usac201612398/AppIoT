@@ -13,15 +13,14 @@
 #define ECHO_PIN GPIO_NUM_18 // ultrasonico
 
 #define FLOW_SENSOR_PIN GPIO_NUM_4 // Pin de salida del sensor YF-S201
-#define INTERVAL_MS 2000           // Intervalo de lectura (2s)
-#define ML_PER_PULSE 2.25          // Mililitros por pulso (ajustable)
+#define INTERVAL_MS 2000           // Tiempo de lectura
+#define ML_PER_PULSE 2.25          // Mililitros por pulso
 #define QUEUE_LEN 10
 
 #define DS18B20_GPIO GPIO_NUM_15
 #define MAX_DEVICES 1
 #define ALTURA_TANQUE_CM 35.0
-#define RELAY_ACTIVE_LEVEL 0   // 
-
+#define RELAY_ACTIVE_LEVEL 0 //
 
 static volatile uint32_t pulse_count = 0;
 static portMUX_TYPE pulse_mux = portMUX_INITIALIZER_UNLOCKED;
@@ -31,11 +30,11 @@ static QueueHandle_t sensor_queue;
 
 static const char *TAG = "SENSORES_TANQUE";
 
-/* Descriptor del sensor */
+/* Descriptor del sensor ultrasonico */
 static ultrasonic_sensor_t tank_sensor = {
     .trigger_pin = TRIG_PIN,
-    .echo_pin = ECHO_PIN};
-
+    .echo_pin = ECHO_PIN
+};
 
 static void ultrasonico_task(void *arg)
 {
@@ -51,7 +50,6 @@ static void ultrasonico_task(void *arg)
             float nivel_cm = ALTURA_TANQUE_CM - distancia_cm;
             if (nivel_cm > ALTURA_TANQUE_CM)
                 nivel_cm = ALTURA_TANQUE_CM;
-                
 
             if (nivel_cm < 0)
                 nivel_cm = 0;
@@ -75,13 +73,12 @@ static void ultrasonico_task(void *arg)
     }
 }
 
-// Interrupción: cada pulso incrementa el contador
+//Cada pulso incrementa el contador al realizarse la interrumpcion
 static void IRAM_ATTR flow_pulse_isr(void *arg)
 {
     pulse_count++;
 }
 
-// Tarea ajustada para recibir cola
 static void caudal_task(void *arg)
 {
 
@@ -107,7 +104,7 @@ static void caudal_task(void *arg)
         msg.valor2 = 0;
         msg.timestamp_ms = esp_timer_get_time() / 1000;
 
-        xQueueSend(queue, &msg, 0);
+        xQueueSend(queue, &msg, portMAX_DELAY);
 
         ESP_LOGI(TAG, "Flujo: %.2f L/min (%d pulsos)", lpm, count);
     }
@@ -126,6 +123,7 @@ static void temperatura_task(void *arg)
                                      ds18x20_addrs[0],
                                      &temp) == ESP_OK)
         {
+            temp = (temp*9/5) + 32;
             msg.sensor = SENSOR_TEMP;
             msg.valor1 = temp;
             msg.valor2 = 0;
@@ -133,7 +131,7 @@ static void temperatura_task(void *arg)
 
             xQueueSend(queue, &msg, 0);
 
-            ESP_LOGI(TAG, "Temp: %.2f C", temp);
+            ESP_LOGI(TAG, "Temp: %.2f F", temp);
         }
         else
         {
@@ -146,9 +144,9 @@ static void temperatura_task(void *arg)
 
 void caudalimetro_init(QueueHandle_t queue)
 {
-    // No creamos la cola aquí, la recibimos como parámetro
+    // No creamos la cola aquí, sino que se recibe como parámetro
 
-    // Configuramos GPIO como input con pull-up
+    // Se configura GPIO como input con pull-up
     gpio_config_t io_conf = {
         .intr_type = GPIO_INTR_POSEDGE,
         .mode = GPIO_MODE_INPUT,
@@ -160,12 +158,12 @@ void caudalimetro_init(QueueHandle_t queue)
     gpio_install_isr_service(0);
     gpio_isr_handler_add(FLOW_SENSOR_PIN, flow_pulse_isr, NULL);
 
-    // Creamos la tarea que lee el flujo
+    // Se crea la tarea que lee el flujo
     xTaskCreatePinnedToCore(
         caudal_task,
         "caudal_task",
         4096,
-        (void *)queue, // pasamos la cola a la tarea
+        (void *)queue, // Se pasa la cola a la tarea
         5,
         NULL,
         0);
@@ -178,10 +176,15 @@ void temperatura_init(QueueHandle_t queue)
                          MAX_DEVICES,
                          &ds18x20_device_count);
 
-    if (ds18x20_device_count == 0)
+    if (ds18x20_device_count > 0)
     {
-        ESP_LOGE(TAG, "No se detectó DS18B20");
-        return;
+        float temp;
+        ds18x20_measure_and_read(DS18B20_GPIO, ds18x20_addrs[0], &temp);
+        ESP_LOGI(TAG, "Temperatura inicial: %.2f C", temp);
+    }
+    else
+    {
+        ESP_LOGW(TAG, "No hay sensor DS18B20 disponible");
     }
 
     ESP_LOGI(TAG, "DS18B20 detectado");

@@ -1,7 +1,6 @@
 #include "mqtt_service.h"
 #include "esp_log.h"
 
-
 //#define BROKER "mqtts://a4810e38lk0oy-ats.iot.us-east-1.amazonaws.com/8883"
 #define BROKER "mqtt://10.111.112.4/1883"
 #define USER_MQTT "sdc-iot"
@@ -79,6 +78,7 @@ static const char device_cert_pem[] =
 "O4DKEADMVlHpCPkrdFxOG/CWlugLs50N9MRRS9YUPH+QuEWvzb6m+UJ/zH15\n" \
 "-----END CERTIFICATE-----\n";
 */
+
 static const char *TAG = "MQTT_SERVICE";
 static esp_mqtt_client_handle_t client;
 static bool mqtt_connected = false;
@@ -109,6 +109,7 @@ static void mqtt_event_handler(void *handler_args,
 
 void mqtt_service_init(void)
 {
+   
     esp_mqtt_client_config_t mqtt_cfg = {
         .broker.address.uri = BROKER,
         //.broker.verification.certificate=(const char *)aws_root_ca_pem,
@@ -116,6 +117,7 @@ void mqtt_service_init(void)
         //.credentials.authentication.key=(const char *)private_key_pem
         .credentials.username = USER_MQTT,
         .credentials.authentication.password = PASS_MQTT,
+        .credentials.client_id = "planta_1"
     };
 
     client = esp_mqtt_client_init(&mqtt_cfg);

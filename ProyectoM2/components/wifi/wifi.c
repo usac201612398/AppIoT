@@ -4,27 +4,50 @@
 #include "esp_wifi.h"
 #include "nvs_flash.h"
 #include "esp_log.h"
+#include <stdbool.h> 
+#include "mqtt_service.h"
 
-//#define WIFI_SSID "SEEDS-SR"
-//#define WIFI_PASS "S3m1ll@523"
-#define WIFI_SSID "ELVALLE"
-#define WIFI_PASS "8A68BEC788"
+// #define WIFI_SSID "SEEDS-SR"
+// #define WIFI_PASS "S3m1ll@523"
+ #define WIFI_SSID "ELVALLE"
+ #define WIFI_PASS "8A68BEC788"
+//#define WIFI_SSID "FAM.PORTILLO"
+//#define WIFI_PASS "ZTT45WHK"
 static const char *TAG = "WIFI";
+static bool wifi_connected = false;
+static int retry_count = 0;
+#define MAX_RETRY 5
+
+bool wifi_is_connected(void)
+{
+    return wifi_connected;
+}
 
 static void event_handler(void* arg, esp_event_base_t event_base,
                           int32_t event_id, void* event_data)
 {
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
-        ESP_LOGI(TAG, "Intentando conectar...");
         esp_wifi_connect();
     } 
     else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
-        ESP_LOGI(TAG, "Fallo conexión. Reintentando...");
-        esp_wifi_connect();
+
+        wifi_connected = false;
+
+        if (retry_count < MAX_RETRY) {
+            esp_wifi_connect();
+            retry_count++;
+        } else {
+            ESP_LOGE(TAG, "No se pudo conectar al AP");
+        }
     } 
     else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
+
+        wifi_connected = true;
+        retry_count = 0;
+
         ip_event_got_ip_t* event = (ip_event_got_ip_t*) event_data;
-        ESP_LOGI(TAG, "IP asignada: " IPSTR, IP2STR(&event->ip_info.ip));
+        ESP_LOGI(TAG, "IP: " IPSTR, IP2STR(&event->ip_info.ip));
+        mqtt_service_init(); // Se conecta con el broker una vez tengamos internet
     }
 }
 
@@ -57,5 +80,4 @@ void wifi_init_sta(void)
     esp_wifi_set_mode(WIFI_MODE_STA);
     esp_wifi_set_config(WIFI_IF_STA, &wifi_config);
     esp_wifi_start();
-
 }

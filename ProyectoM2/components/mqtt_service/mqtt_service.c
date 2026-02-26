@@ -1,16 +1,22 @@
 #include "mqtt_service.h"
 #include "esp_log.h"
 #include "cJSON.h"
+#include "freertos/FreeRTOS.h"
+//#include "freertos/semphr.h"
 
 #define BROKER "mqtt://10.111.112.4:1883"
 #define USER_MQTT "sdc-iot"
 #define PASS_MQTT "nuevacontraseña"
-//#define BROKER "mqtts://a4810e38lk0oy-ats.iot.us-east-1.amazonaws.com/8883"
-#define TOPIC_PLANTA "casa/planta01/data"
-#define TOPIC_LLENADO_MANUAL "casa/tanque01/llenado/manual"
-#define TOPIC_RIEGO_MANUAL "casa/tanque01/riego/manual"
-static planta_state_t planta_state = {0};
-/**
+// #define BROKER "mqtts://a4810e38lk0oy-ats.iot.us-east-1.amazonaws.com/8883"
+#define TOPIC_PLANTA_SUB "casa/planta/+/data"
+#define TOPIC_LLENADO_MANUAL "casa/tanque/1/llenado/manual"
+#define TOPIC_RIEGO_MANUAL "casa/tanque/1/riego/manual"
+#define TOPIC_RIEGO_HISTORIAL "casa/tanque/1/riego/historial"
+
+#define NUM_ZONAS 2
+#define TIEMPO_RIEGO_MS 20000
+
+/*
 static const char aws_root_ca_pem[] =
     "-----BEGIN CERTIFICATE-----\n"
     "MIIDQTCCAimgAwIBAgITBmyfz5m/jAo54vB4ikPmljZbyjANBgkqhkiG9w0BAQsF\n"
@@ -82,21 +88,58 @@ static const char device_cert_pem[] =
     "n8KaqPtMQJolLrK3Ni3d3IF2jsq1vQzu4qw8feFaM/FvgNUgfpjQTUY3mH0S083a\n"
     "O4DKEADMVlHpCPkrdFxOG/CWlugLs50N9MRRS9YUPH+QuEWvzb6m+UJ/zH15\n"
     "-----END CERTIFICATE-----\n";
-**/
+*/
+
 static const char *TAG = "MQTT_SERVICE";
 static esp_mqtt_client_handle_t client;
 static bool mqtt_connected = false;
-static void mqtt_handle_preparar_data(esp_mqtt_event_handle_t event);
-static void mqtt_parse_planta_data(const char *data);
 
-static void mqtt_parse_planta_data(const char *data)
+//static SemaphoreHandle_t planta_state_mutex = NULL;
+static planta_state_t plantas_state[NUM_ZONAS];
+
+static void mqtt_handle_preparar_data(esp_mqtt_event_handle_t event);
+static void mqtt_parse_planta_data(const char *data, int zona);
+
+void publicar_historial_riego(int zona, const char *accion, int tiempo_ms, bool manual)
+{
+    if (zona < 1 || zona > NUM_ZONAS)
+        return;
+    int idx = zona - 1; // índice del array
+
+    cJSON *root = cJSON_CreateObject();
+    if (!root)
+        return;
+
+    cJSON_AddStringToObject(root, "tanque_id", "tanque_0001");
+    cJSON_AddNumberToObject(root, "zona", zona);
+    cJSON_AddStringToObject(root, "accion", accion);
+    cJSON_AddNumberToObject(root, "tiempo", tiempo_ms / 1000); // convertir a segundos
+    cJSON_AddStringToObject(root, "modo", manual ? "MANUAL" : "AUTO");
+
+    //if (xSemaphoreTake(planta_state_mutex, portMAX_DELAY))
+    //{
+    cJSON_AddNumberToObject(root, "temp_amb", plantas_state[idx].temp_amb);
+    cJSON_AddNumberToObject(root, "hum_amb", plantas_state[idx].hum_amb);
+    cJSON_AddNumberToObject(root, "hum_suelo", plantas_state[idx].hum_suelo);
+    cJSON_AddNumberToObject(root, "peso", plantas_state[idx].peso);
+       // xSemaphoreGive(planta_state_mutex);
+    //}
+
+    char *json = cJSON_PrintUnformatted(root);
+    if (json)
+    {
+        esp_mqtt_client_publish(client, TOPIC_RIEGO_HISTORIAL, json, 0, 1, 0);
+        free(json);
+    }
+
+    cJSON_Delete(root);
+}
+
+static void mqtt_parse_planta_data(const char *data, int zona)
 {
     cJSON *root = cJSON_Parse(data);
     if (!root)
-    {
-        ESP_LOGW(TAG, "JSON invalido");
         return;
-    }
 
     cJSON *temp = cJSON_GetObjectItem(root, "temp_amb");
     cJSON *hum = cJSON_GetObjectItem(root, "hum_amb");
@@ -105,16 +148,22 @@ static void mqtt_parse_planta_data(const char *data)
 
     if (temp && hum && suelo && peso)
     {
-        planta_state.temp_amb = temp->valuedouble;
-        planta_state.hum_amb = hum->valuedouble;
-        planta_state.hum_suelo = suelo->valuedouble;
-        planta_state.peso = peso->valuedouble;
-        ESP_LOGI(TAG,
-                 "Planta -> T:%.2f H:%.2f S:%.2f P:%.2f",
-                 temp->valuedouble,
-                 hum->valuedouble,
-                 suelo->valuedouble,
-                 peso->valuedouble);
+        //if (xSemaphoreTake(planta_state_mutex, portMAX_DELAY))
+        //{
+        plantas_state[zona].temp_amb = temp->valuedouble;
+        plantas_state[zona].hum_amb = hum->valuedouble;
+        plantas_state[zona].hum_suelo = suelo->valuedouble;
+        plantas_state[zona].peso = peso->valuedouble;
+
+        ESP_LOGI(TAG, "Zona %d -> T:%.2f H:%.2f S:%.2f P:%.2f",
+                    zona + 1,
+                    temp->valuedouble,
+                    hum->valuedouble,
+                    suelo->valuedouble,
+                    peso->valuedouble);
+
+        //    xSemaphoreGive(planta_state_mutex);
+        //}
     }
 
     cJSON_Delete(root);
@@ -123,20 +172,38 @@ static void mqtt_parse_planta_data(const char *data)
 static void mqtt_parse_manual(const char *topic, const char *data)
 {
     cJSON *root = cJSON_Parse(data);
-    if (!root)
-        return;
+    if (!root) return;
 
     cJSON *accion = cJSON_GetObjectItem(root, "accion");
-    ESP_LOGI(TAG, "mqtt_parse_manual: accion recibida = '%s'", accion->valuestring);
     if (accion && cJSON_IsString(accion))
     {
+        ESP_LOGI(TAG, "mqtt_parse_manual: accion = '%s'", accion->valuestring);
+
         if (strcmp(topic, TOPIC_LLENADO_MANUAL) == 0)
         {
             listener_manual_llenado(accion->valuestring);
         }
         else if (strcmp(topic, TOPIC_RIEGO_MANUAL) == 0)
         {
-            listener_manual_riego(accion->valuestring);
+            int z = -1;
+            cJSON *zona = cJSON_GetObjectItem(root, "zona");
+            cJSON *tiempo = cJSON_GetObjectItem(root, "tiempo");
+
+            if (zona)
+                z = cJSON_IsNumber(zona) ? zona->valueint : atoi(zona->valuestring);
+
+            if (z != -1)
+            {
+                int t_ms = TIEMPO_RIEGO_MS;
+                if (tiempo)
+                    t_ms = cJSON_IsNumber(tiempo) ? tiempo->valueint * 1000 : atoi(tiempo->valuestring) * 1000;
+
+                listener_riego_manual(z, accion->valuestring, t_ms);
+            }
+            else
+            {
+                ESP_LOGW(TAG, "Zona inválida en mensaje MQTT");
+            }
         }
     }
 
@@ -155,9 +222,11 @@ static void mqtt_handle_preparar_data(esp_mqtt_event_handle_t event)
 
     ESP_LOGI(TAG, "RX topic: %s", topic);
 
-    if (strcmp(topic, TOPIC_PLANTA) == 0)
+    if (strncmp(topic, "casa/planta/", 12) == 0)
     {
-        mqtt_parse_planta_data(data);
+        int zona = topic[12] - '1';
+        if (zona >= 0 && zona < NUM_ZONAS)
+            mqtt_parse_planta_data(data, zona);
     }
     else if (strcmp(topic, TOPIC_LLENADO_MANUAL) == 0 ||
              strcmp(topic, TOPIC_RIEGO_MANUAL) == 0)
@@ -178,22 +247,20 @@ static void mqtt_event_handler(void *handler_args,
     case MQTT_EVENT_CONNECTED:
         ESP_LOGI(TAG, "MQTT conectado");
         mqtt_connected = true;
-        esp_mqtt_client_subscribe(client, TOPIC_PLANTA, 1);
+        esp_mqtt_client_subscribe(client, TOPIC_PLANTA_SUB, 1);
         esp_mqtt_client_subscribe(client, TOPIC_LLENADO_MANUAL, 1);
         esp_mqtt_client_subscribe(client, TOPIC_RIEGO_MANUAL, 1);
         break;
 
     case MQTT_EVENT_DISCONNECTED:
         ESP_LOGW(TAG, "MQTT desconectado");
-
         mqtt_connected = false;
         break;
+
     case MQTT_EVENT_DATA:
         mqtt_handle_preparar_data(event);
         break;
-    case MQTT_EVENT_ERROR:
-        ESP_LOGE(TAG, "MQTT EVENT ERROR type=%d", event->error_handle->error_type);
-        break;
+
     default:
         break;
     }
@@ -201,6 +268,8 @@ static void mqtt_event_handler(void *handler_args,
 
 void mqtt_service_init(void)
 {
+    //planta_state_mutex = xSemaphoreCreateMutex();
+
     esp_mqtt_client_config_t mqtt_cfg = {
         .broker.address.uri = BROKER,
         //.broker.verification.certificate = (const char *)aws_root_ca_pem,
@@ -225,6 +294,21 @@ bool mqtt_is_connected(void)
     return mqtt_connected;
 }
 
+planta_state_t mqtt_get_planta_state(int zona)
+{
+    if (zona < 1 || zona > NUM_ZONAS) return (planta_state_t){0};
+
+    //planta_state_t copia;
+    //if (xSemaphoreTake(planta_state_mutex, portMAX_DELAY))
+    //{
+        //copia = plantas_state[zona - 1];
+    //    xSemaphoreGive(planta_state_mutex);
+    //}
+    //return copia;
+    return plantas_state[zona - 1];
+}
+
+/*
 void mqtt_publicar_estado_valvula(bool abierta, float porcentaje)
 {
     if (!mqtt_is_connected())
@@ -246,7 +330,7 @@ void mqtt_publicar_estado_valvula(bool abierta, float porcentaje)
             json,
             0,
             1,
-            1); // retain activado
+            0); // retain activado
 
         free(json);
     }
@@ -254,10 +338,7 @@ void mqtt_publicar_estado_valvula(bool abierta, float porcentaje)
     cJSON_Delete(root);
 }
 
-planta_state_t mqtt_get_planta_state(void)
-{
-    return planta_state;
-}
+
 
 void mqtt_publicar_estado_riego(bool activo)
 {
@@ -279,9 +360,10 @@ void mqtt_publicar_estado_riego(bool activo)
             json,
             0,
             1,
-            1); // retain activado
+            0); // retain activado
         free(json);
     }
 
     cJSON_Delete(root);
 }
+*/

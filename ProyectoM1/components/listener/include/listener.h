@@ -3,4 +3,4 @@
 
 void listener_init(void);
 
-#endif // LISTENER_H
+#endif

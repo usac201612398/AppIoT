@@ -8,8 +8,8 @@ extern bool riego_activo;
 
 void listener_init(void);
 void listener_manual_llenado(const char *accion);
-void listener_manual_riego(const char *accion);
+//void listener_manual_riego(const char *accion);
 //tanque_state_t mqtt_get_tanque_state(void);
-void mqtt_parse_manual(const char *topic, const char *data);
+void listener_riego_manual(int zona, const char *accion, int tiempo_ms);
 
 #endif

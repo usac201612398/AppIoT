@@ -26,7 +26,7 @@ static adc_oneshot_unit_handle_t adc_handle;
 static QueueHandle_t sensor_queue;
 static dht11_t dht11_sensor;
 static int32_t peso_offset = -124000;
-static float peso_factor = -479333; // calibrar
+static float peso_factor = -494503; // calibrar
 TickType_t last_publish = 0;
 const TickType_t publish_period = pdMS_TO_TICKS(60000); // 60 s
 
@@ -63,16 +63,20 @@ static void dht11_task(void *arg)
     {
         if (dht11_read(&dht11_sensor, CONNECTION_TIMEOUT) == 0)
         {
-
+            float temperature;
+            float td;
+            temperature = (dht11_sensor.temperature)*9/5 +32;
+            td = dht11_sensor.temperature-((100-dht11_sensor.humidity)/5);
             msg.sensor = SENSOR_DHT11;
-            msg.valor1 = dht11_sensor.temperature;
+            msg.valor1 = temperature;
             msg.valor2 = dht11_sensor.humidity;
+            msg.valor3 = td;
             msg.timestamp_ms = esp_timer_get_time() / 1000;
 
             xQueueSend(sensor_queue, &msg, 0);
 
-            ESP_LOGI(TAG, "Enviado a queue: T=%.1f H=%.1f",
-                     msg.valor1, msg.valor2);
+            ESP_LOGI(TAG, "Enviado a queue: T=%.1f H=%.1f Ts=%1f" ,
+                     msg.valor1, msg.valor2, msg.valor3);
         }
 
         vTaskDelay(pdMS_TO_TICKS(10000)); // 10 segundos entre lecturas
